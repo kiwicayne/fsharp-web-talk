@@ -1,0 +1,145 @@
+Real-world Web Applications using F#
+------------------------------------
+
+We will look at real-world web development using F#. This talk will just focus on ASP.Net MVC and WebApi but there are other very good alternatives. F# can even be compiled to Typescript so provides an interesting alernative to using javascript.
+
+Example App - continuation of previous talks.  Type in a name, submit, sends a message.  First to the debugger, then later add support for SignalR.
+
+1. Using standard ASP.Net MVC and WebApi
+
+  - Demo Application
+
+  - Project Structure - This is an example for a large application or one that shares common domain/infrastructure
+    - Domain assembly is for domain types and domain logic
+    - Infrastructure assembly is for infrastructure such as persistence
+    - HOWEVER! Multlple projects are far less important in F# as no cyclical dependencies are allowed - order of compilation matters. This means that the languange and compiler help protect you from cross cutting concerns.  Dependency management is simpler. Large F# solutions have far fewer projects. This is overkill for this small project.  
+    - Controllers are in a single file.
+      - You can separate your controllers into different files like C#, but it is idiomatic in F# to group common modules in a single file.  Use Ctrl+, to navigate.  Don't be scared of large modules or lots of code in a file, navigation is easy and this structure makes it easier not harder to find code/learn a system.
+    - Look at the files, read from bottom up, very easy to understand the system and where everything is.
+
+  - F# tooling
+    - Search for "fsharp" in extensions and updates
+    - F# MVC 5, Visual F# Power Tools, F# Web Item Templates
+    - We will show using F# with ASP.Net 4, not new ASP.Net Core.
+
+  - Discuss .Net Core
+    - Open source and Cross platform (was DNX now its the CLI (.Net command line interface)).  So far supports (to varying degrees) Ubuntu, Windows, Mac OS X, CentOS.  https://github.com/dotnet/cli
+    - Exist .Net probably legacy now but should be supported for many years, as Asp.net forms/winforms have been.  Future .Net stacks will be built on this however, such as ASP.Net Core.
+    - Doesn't yet support F# - Open Source so can contribute and see the status here https://github.com/Microsoft/visualfsharp/wiki/F%23-for-CoreCLR---Status
+    - Because F# support not yet finished, we will use current stack.  If using OWIN, with same tooling (gulp/bower/etc), and doing mostly SPA, there isn't much benefit to using the new ASP.Net core yet.  It should perform better and will eventually run on many platforms, but you can already do this with mono.  .Net Core is the future however, and will be fully supported by Microsoft.  Mono is supported by the community.  This can matter particularly if you work in the enterprise space.
+
+  - Project Setup
+    - Demo creating an ASP.Net app from template with F#
+    - What is included?  I updated the Nuget packages as they are very out of date.
+
+  - Switch back to the MessageIt app
+
+  - Home
+    - Controller
+      - OOP, very terse
+    - View
+      - Razor Html helper, this is C# mixed into the F# project
+
+  - Messenger
+    - Controller
+      - Has a dependency, it is a function signature not an interface.  Mixing paradims.
+    - View
+      - More Razor, this time using an F# record type!
+
+  - Manual Dependency Injection - could use Ninject or another container, but easy in F#
+    - MvcDependencyInjection.fs - active patterns make this clean
+    - MVC configured to used it in Global.asax.fs Application_Start()
+
+  - Message Api
+    - Controller
+      - Using strong typing (DomainTypes)
+      - ApiDependencyInection.fs
+      - Api configured to used it in Global.asax.fs RegisterWebApi()      
+
+  - FAKE - Run when setting up environment.  Extend to deploy/work with Continuous Integration.  I prefer it to MSBuild, Powershell, Gulp, but not a lot of reason to switch if you are really comfortable with your existing tools.  
+    - Paket like Nuget but more powerful, e.g. supports GitHub. F# community prefer it.
+  
+  DEMO: delete packages folder and bin/obj folders - run build
+
+  Summary 
+    - No interface bloat with F#
+    - Less code
+    - less projects
+    - Mixing paradims works well
+
+
+2. Restructure things a bit and add error handling in a functional way
+  - First collapse multiple projects into a single project - get realistic, remember compiler helps protect you
+  - Now even easier to understand entire system.  Forced to start with root of application at bottom (entry point) with domain types at the top.
+  - I recommend changing project build options to set "Treat warnings as errors" to All (so an incomplete pattern match is an error for example).  Alternatively treat warning 25 as an error specifically.
+
+  - Extend domain types to use a custom type instead of a string.  Now it isn't possible to have an invalid value once instance is created.
+    - Show name on Person
+    - Explain type 
+      - show signature file to prevent construction without create being called (factory pattern)
+      - Impossible to have null, equality works out of the box.  Cannot create a Person with a missing or invalid name as the type system will not allow it.
+
+  - Overview of the more complex ROP code.  Focus more on how it is used rather than how it is implemented.  Show how the entirety of Rop is implemented in a single file that isn't very long, lots of very small functions that are composed together to make a larger system.
+    - This is a modified version of https://github.com/swlaschin/Railway-Oriented-Programming-Example
+    - Two tracks, for each operation it can succeed or fail
+    - Each track can have associated messages, useful for checking what events or errors have occured
+    ********todo: give an example for each item below**********
+    - bind  >>= - glue functions that return RopResult together, short circuit if any fail
+    - apply <*> - given a function wrapped in a result and a value wrapped in a result apply the function to the value if both are successes
+    - lift  <!> - If a wrapped value is a succeess apply a function to the value that maps it to something else
+    - map another name for lift
+    - successTee - Call a function on the success branch and pass thru the result.  E.g. log sucess message, ignore failure.
+    - failureTee - Call a function on the failure branch and pass thru the result. E.g. log failure message, ignore success.
+
+  - Dtos.fs
+    - Validation is done when constructing the domain type from dto, so no need for a separate step as in C#
+    - Show pattern <!> + <*> - This is a repeatable recipie you don't have to understand how it is implemented
+    - Show the domain helper functions (e.g. createName in DomainModel.fs), this is where the primity type errors are mapped to DomainMessages
+
+  - Avoid exceptions.  They are exceptional not something you should ever expect.  With user input, you expect validation to fail sometimes, this SHOULD NOT be handled by exceptions.  Unfortunate that this has become normal in languages like C#/Java/etc.  F# allows very powerful return types and the compiler can force you to handle every type of error.
+    - Wrap all exceptions in functional style code other than truely exceptional stuff like out of memory
+    - See DomainMessage type on DomainModel
+      - Code documents every single error your entire application could encounter.  
+      - Strongly typed, compiler forces you to handle all errors
+    - OutOfMemory etc are truly exceptional and are not handled this way - your application root should handle these, almost always better to restart your app than try to make it work in an invalid state.
+
+  - ApiController.fs
+    - Show the Send method
+      - Very easy to read what is going on
+      - This is logging errors on failure and logging a trace message on the success branch no if's/trycatch/cyclomatic complexity
+      - send2 shows another way if you prefer not to define helpers
+      - send3 is closer to what your code would look like in a real-world system
+
+  - Show different response types in ApiHelper.fs classify function
+    - Return different response types simply by extending e.g. return internal server error for a database error 
+
+  
+3. Detect an event to send an alert if the message is HELP!
+  - This step is just a silly example to show what the RopResult messages can be used for
+  - DEMO - new emergency alert system - show with multiple browser windows
+  - Uses SignalR to push an alert up to every client when an emergency is detected
+
+  - DomainModel.fs
+    - Added a new DomainMessage
+  - ApiHelpers.fs
+    - Added to classify, with new response DomainEvent    
+    - toHttpResult updated to handle the new DomainEvent - return OK response, e.g. for an API action that returns each "action" that occured.  Probably wouldn't do this, but forced to hanlde it (and this is meaningful)  
+  - MessageWriters.fs
+    - Changed things around a bit by combining writers into a single module
+    - Added logic for when an emergency message is written, add the event to the domain messages in the RopResult
+  - ApiControllers.fs
+    - Just added one line to the send member, doesn't complicate the code, very easy to understand
+    - Implemention of the event handler in function notifyWhenEmergencyMessageSent.  This is generic, uses the alertEmergencyServices dependency to do the alerting.  Pretty typical of F# to keep things together by default and only split out when things start getting complicated or the functionality is needed in more than once place.
+  - Messenger/Index.cshtml
+    - Moved javascript into its own file
+    - Added emergency.js for SignalR
+  - Hubs.fs
+    - Calls showAlert on every client with the name and message that was sent
+  - ApiDependencyInjection.fs
+    - emergencyAlertSystem is passed in as a dependency, only type signature matters
+
+Summary
+-------
+There are no mutable variables/class properties/etc anywhere!  We did use [<CLIMutable>] to set the inital value of the dto, but once set it cannot be changed.  Web development and functional programing are a really good match.
+
+Interest in future talk showing SPA, API security, Database access with F#?
